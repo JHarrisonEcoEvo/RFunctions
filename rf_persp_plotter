@@ -1,0 +1,72 @@
+
+rf_persp_plotter <- function(model, dataForPlot, x, y, x_lab = x, y_lab = y, z_lab = "Response", plot_theta = -45, 
+                             plot_phi=30,num_breaks = 19){
+  
+  #take names, input as characters, for the x and y variables of interest
+  xVec <- dataForPlot[,which(names(dataForPlot)==x)]
+  yVec <- dataForPlot[,which(names(dataForPlot)==y)]
+  
+  #Break x and y axes into n breaks specified by num_breaks
+  var1_vals <- seq(from = min(xVec),to = max(xVec),by = (max(xVec) - min(xVec))/num_breaks)       
+  var2_vals <- seq(from = min(yVec),to = max(yVec), by = (max(yVec) - min(yVec))/num_breaks)
+  
+  #create a dataframe of all combinations of the those breaks. 
+  two_vals <- expand.grid(var1_vals, var2_vals)
+  
+  #sort
+  two_vals <- dplyr::arrange(two_vals, Var1, Var2)
+  
+  #repeat the data for plotting the length of two_vals (total number of combinations)
+  two_rep <- dataForPlot[rep(1:nrow(dataForPlot), nrow(two_vals)), ]
+  
+  #repeat the breaks we made earlier so we can group by these later, 
+  #overwrite the original data for these values
+  two_rep[,which(names(two_rep) == x)]<- rep(two_vals$Var1, each = nrow(dataForPlot))
+  two_rep[,which(names(two_rep) == y)]<- rep(two_vals$Var2, each = nrow(dataForPlot))
+  
+  #use the predict function to run our new data down the model 
+  two_pred <- predict(model, two_rep)   
+  two_rep$pred <- two_pred
+  
+  #make a unique variable for each combination of x and y to group the data by
+  two_rep$groups <- paste(two_rep[,which(names(two_rep) == x)], two_rep[,which(names(two_rep) == y)])
+  
+  #calculate mean predicted value for each group
+  #the mess is bc plyr doesn't do well with hard coding stuff.
+  call <- substitute(group_by(two_rep, x,y), list(x = as.name(x), y = as.name(y))) 
+  two_agg <-eval(call) %>%
+    summarise(mean_pred = mean(pred))
+  
+  z <- matrix(two_agg$mean_pred, nrow = length(var1_vals), byrow = TRUE)
+  
+  #Set colors, plot dimensions, and plot
+  
+  # Set color range (using grayscale)
+  jet.colors <- colorRampPalette( c("#ffffff", "#2a2a2a") ) 
+  
+  # Generate the desired number of colors from this palette
+  nbcol <- 100
+  color <- jet.colors(nbcol)
+  
+  # Compute the z-value at the facet centers
+  zfacet <- z[-1, -1] + z[-1, -1 * length(var1_vals)] + z[-1 * length(var2_vals), -1] + z[-1 * length(var1_vals), -1 * length(var2_vals)]
+  
+  # Recode facet z-values into color indices
+  facetcol <- cut(zfacet, nbcol)
+  
+  # Use persp for 3D plotting; theta and pi control angle of view
+  persp(x = var1_vals, 
+        y = var2_vals, 
+        z = z, 
+        theta = plot_theta, 
+        phi= plot_phi, 
+        xlab = paste("\n",x_lab), #\n adds a line
+        ylab = paste("\n",y_lab), 
+        zlab = paste("\n",z_lab), 
+        cex.lab = 1, 
+        ticktype = "detailed", 
+        col = color[facetcol])
+}
+
+
+  
